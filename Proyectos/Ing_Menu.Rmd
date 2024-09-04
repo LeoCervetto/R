@@ -1,0 +1,715 @@
+---
+title: "Ingeniería de Menú"
+output: 
+  flexdashboard::flex_dashboard:
+    orientation: rows
+    vertical_layout: fill
+runtime: shiny
+---
+
+<style>                     
+.navbar {
+  background-color:#b9935a;
+  border-color:white;
+}
+.navbar-brand {
+color:black!important;
+}
+</style>        
+
+
+
+```{r setup, include=FALSE}
+library(flexdashboard)
+library(shiny)
+library(tidyverse)
+library(plotly)
+library(ggthemes)
+library(DT)
+library(scales)
+library(RColorBrewer)
+```
+
+
+Gráfica {data-navmenu=Clasificacón}
+==================================================
+
+Column {data-width=650}
+-----------------------------------------------------------------------
+
+```{r}
+############################
+# INGENIERÍA DE MENÚ CON R #
+############################
+
+# El siguiente proyecto tiene como objetivo automatizar la Ingeneria de Menú
+# y los princiíos de Omnes-Smith a través de una aplicación web para ser usada
+# por dueños, gerentes u estudiantes de la industria gastronómica.
+
+
+
+
+
+
+# Para el correcto funcionamiento de la aplicación, es necesario que la
+# tabla de datos siga una estructura determinada, la cual es:
+#
+# Primera columna: nombre del producto en la carta. 
+# Segunda columna: unidades vendidas del periodo a analizar.
+# Tercera columna: precio de venta del producto.
+# Cuarta  columna: margen de contribución unitario de cada producto.
+
+# A continuacion, se ejemplifica con una tribble el formato de los datos de entrada
+# (esta tribble se usará para correr la app)
+
+
+BD_ING_MENU <- tribble(
+ ~Producto,             ~`Unidades vendidas`, ~`Precio venta`, ~Margen,
+ "Atun rojo",                   76,                16.5,        11.55,
+ "Bacalao confitado",           125,               18,          13.27,
+ "Pulpo a la brasa",            120,               15,          8.5,  
+ "Almejas salteadas",           35,                12,          8.4, 
+ "Rodaballo a la plancha",      93,                19,          13.75,
+ "Cochinillo confitado",        47,                24.5,        18.7,
+ "Ostras",                      22,                9.5,         7.1,
+ "Cordero",                     110,               19.5,        13.71,
+ "Rabo",                        51,                19,          14.88,
+ "Solomillo",                   128,               14,          6.88,  
+ "Paella",                      49,                14.5,        7.71,  
+ "Merluza",                     45,                17.5,        12.03,
+ "Filete",                      60,                24,          16
+)
+
+
+
+
+# tambien, si tienes tu información en excel, tablas, csv, u otro formato, puedes 
+# usar funciones de R para la carga de los datos
+
+# 1-. Fijar directorio de trabajo
+#setwd("Mi directorio de trabajo")
+
+# 2-. csv
+#BD_ING_MENU <- read_csv(".csv")
+
+# 3-. excel
+#BD_ING_MENU <- read_excel(".xlsx", sheet = "Hoja1")
+
+
+# También se recomienda estandarizar el nombre de las columnas con el siguiente código
+# colnames(BD_ING_MENU) <- c("Producto", "Unidades vendidas", "Precio venta", "Margen")
+
+
+```
+
+
+```{r}
+
+# Calcular indice de popularidad ------------------------------------------
+BD_ING_MENU %>% 
+mutate(indice_pop= `Unidades vendidas`/sum(`Unidades vendidas`)*100 )-> BD_ING_MENU
+
+
+#### Calcular mix ideal ####
+mix_ideal <- (100/nrow(BD_ING_MENU))*0.7
+
+#### Agregar clasificación de la popularidad ####
+limit_pop <- c(-Inf, mix_ideal, Inf)
+names_pop <- c("BAJO", "ALTO")
+
+BD_ING_MENU %>% 
+mutate(clasificación_pop= cut(indice_pop, 
+                              breaks=limit_pop,
+                              labels= names_pop))-> BD_ING_MENU
+
+
+
+# Calcular índice de rentabilidad ------------------------------------------
+
+### margen total ####
+BD_ING_MENU %>% 
+mutate(margen_total= Margen * `Unidades vendidas`)-> BD_ING_MENU
+
+
+
+#### calcular margen de contribución medio #####
+margen_contrib_medio <- sum(BD_ING_MENU$margen_total)/ sum(BD_ING_MENU$`Unidades vendidas`)
+
+
+#### agregar clasificación de rentabilidad ####
+limit_rent <- c(-Inf, margen_contrib_medio, Inf)
+names_rent <- c("BAJO", "ALTO")
+
+BD_ING_MENU %>% 
+  mutate(clasific_rent= cut(Margen,
+                            breaks= limit_rent,
+                            labels= names_rent))-> BD_ING_MENU
+
+
+# Agregar clasificación final ---------------------------------------------
+attach(BD_ING_MENU)
+
+BD_ING_MENU$clasific_final <- 
+ifelse(clasific_rent == "ALTO" & clasificación_pop == "BAJO", "VACA",
+ifelse(clasific_rent == "ALTO" & clasificación_pop == "ALTO","ESTRELLA", 
+ifelse(clasific_rent == "BAJO" & clasificación_pop == "ALTO", "ENIGMA",
+      "PERRO")))
+
+```
+
+
+
+###
+
+```{r}
+
+BD_ING_MENU %>% 
+  ggplot()+
+  aes(`Unidades vendidas`, Margen, color= clasific_final)+
+  geom_point(show.legend = F, size = 4, shape = 18)+
+  geom_text(label=Producto, nudge_y = 0.6, check_overlap = F, show.legend = F)+
+  geom_vline(xintercept = sum(`Unidades vendidas`)*(mix_ideal/100), lty = 2, lwd=0.7, color = "#808080")+
+  geom_hline(yintercept = margen_contrib_medio, lty = 2, lwd = 0.7, color = "#808080")+
+  scale_color_brewer(palette = "Set2")+
+  theme_fivethirtyeight()+
+  theme(axis.title = element_text())+ 
+  ylab("Margen de rentabilidad individual")+
+  xlab("Unidades vendidas del periodo")-> po
+
+ggplotly(po)
+
+```
+
+
+Column {data-width=100}
+-----------------------------------------------------------------------
+
+### Total unidades vendidas
+
+```{r}
+
+Ventas_Totales <- sum(BD_ING_MENU$`Unidades vendidas`)
+
+valueBox(prettyNum(Ventas_Totales, big.mark = ","),
+         caption = "Total de platos vendidos",
+         icon = "ion-fork",
+         color = "#808000")
+
+```
+
+
+### ventas totales
+
+```{r}
+
+Ventas <- round(sum(BD_ING_MENU$`Precio venta` * BD_ING_MENU$`Unidades vendidas`) ,0)
+
+valueBox(dollar(Ventas),
+         caption = "Ventas totales",
+         icon = "fa-money",
+         color = "#808000"
+         )
+
+```
+
+
+### PRECIO VENTAS
+
+```{r}
+
+precio_ventas<- round(mean(BD_ING_MENU$`Precio venta`), 2 )
+
+valueBox(dollar(precio_ventas),
+         caption = "Precio de venta promedio",
+         icon = "ion-arrow-graph-up-right",
+         color = "#808000"
+         )
+
+```
+
+
+### Margen de rentabilidad 
+
+```{r}
+
+margen <- round(mean(BD_ING_MENU$Margen)/100 ,4)
+
+valueBox(percent(margen),
+         caption = "Margen de Rentabilidad Promedio",
+         icon = "ion-checkmark",
+         color = "#808000"
+         )
+
+```
+
+
+
+
+Tabla {data-navmenu=Clasificacón}
+==================================================
+
+
+Column {data-width=200 .sidebar}
+-----------------------------------------------------------------------
+
+```{r}
+
+selectInput("Categoria", "Categoria Clasificación",
+            c("VACA", "ESTRELLA", "ENIGMA", "PERRO"))
+
+
+
+
+show_BD_ING_MENU <- reactive({
+  BD_ING_MENU %>%
+    filter(clasific_final == input$Categoria)
+})
+
+```
+
+
+
+Colums {data-width=600}
+-----------------------------------------------------------------------
+
+```{r}
+
+renderDataTable({
+  show_BD_ING_MENU() %>% 
+    datatable(rownames = F, extensions = "Buttons",
+          options = list(pageLength = 100,
+                         dom = "Bfrtip",
+                         buttons = c("copy", "csv", "excel", "pdf", "print")))
+})
+
+```
+
+
+
+Colums {data-width=200}
+-----------------------------------------------------------------------
+
+### Total unidades vendidas
+
+```{r}
+
+renderValueBox({
+  valueBox(prettyNum(show_BD_ING_MENU() %>% summarize(suma = sum(.$`Unidades vendidas`) )
+                       , big.mark = ','), 
+         caption = "Total de platos vendidos",
+         icon = "ion-fork",
+         color = "#808000")
+})
+
+```
+
+
+
+### ventas totales
+
+```{r}
+
+renderValueBox({
+  valueBox(prettyNum(show_BD_ING_MENU() %>%
+                       mutate(ventas = `Unidades vendidas` * `Precio venta`) %>%
+                       summarize(suma = sum(ventas))
+                       , big.mark = ','), 
+         caption = "Ventas totales (En CLP$)",
+         icon = "fa-money",
+         color = "#808000")
+})
+
+```
+
+
+
+### PRECIO VENTAS promedio
+
+```{r}
+
+renderValueBox({
+  valueBox(prettyNum(show_BD_ING_MENU() %>%
+                       summarize(prom = round(mean(`Precio venta`),2))
+                       , big.mark = ','), 
+         caption = "Precio de venta promedio",
+         icon = "ion-arrow-graph-up-right",
+         color = "#808000")
+})
+
+```
+
+
+
+### Margen de rentabilidad 
+
+```{r}
+
+renderValueBox({
+  valueBox(prettyNum(show_BD_ING_MENU() %>%
+                       summarize(rent = round(mean(Margen),2))
+                       , big.mark = ','), 
+         caption = "Margen de Rentabilidad Promedio",
+         icon = "ion-checkmark",
+         color = "#808000")
+})
+
+```
+
+
+
+
+
+
+Amplitud de gama {data-navmenu="Omnes and Smith"}
+==================================================
+
+Column {data-width=800}
+-----------------------------------------------------------------------------
+
+
+```{r}
+
+# Principio 1
+
+Precio_max <- max(BD_ING_MENU$`Precio venta`)
+Precio_min <- min(BD_ING_MENU$`Precio venta`)
+Diferencia <- Precio_max - Precio_min 
+
+fact <- Diferencia / 3
+
+
+limites <- c(0, Precio_min + fact, Precio_min + fact*2, Precio_min + fact*3)
+class <-  c("Bajo", "Medio", "Alto")
+
+BD_ING_MENU %>% 
+  mutate(Principio_1 = cut(`Precio venta`,
+                            breaks= limites,
+                            labels= class))-> BD_ING_MENU
+```
+
+
+
+###
+
+```{r}
+
+BD_ING_MENU %>% 
+  ggplot()+
+  aes(Principio_1, `Precio venta`, fill = Principio_1)+
+  geom_violin(trim=FALSE)+
+  xlab(NULL)+
+  scale_fill_brewer(palette="Accent")+
+  stat_summary(fun.y=mean, geom="point", size=2, color="red")+
+  theme_fivethirtyeight()+
+  theme(axis.title = element_text())+
+  theme(legend.position="none")+
+  ylab("Precio de Venta")-> violp
+
+ggplotly(violp)  
+
+
+```
+
+
+
+### 
+
+```{r}
+
+BD_ING_MENU %>% 
+  ggplot()+
+  aes(Principio_1)+
+  geom_bar(aes(fill = Producto))+
+  xlab(NULL)+
+  ylab(NULL)+
+  theme_fivethirtyeight()+
+  theme(legend.position="none")+
+  theme(axis.title = element_text())+ 
+  ylab("Unidades")-> barp
+
+ggplotly(barp)
+
+```
+
+
+
+
+
+Column {data-width=200}
+-----------------------------------------------------------------------
+
+
+### Precio min
+
+```{r}
+
+minimo <- min(BD_ING_MENU$`Precio venta`)
+
+valueBox(dollar(minimo),
+         caption = "Precio minimo en carta",
+         color = "#808000",
+         icon = "ion-android-arrow-down")
+
+```
+
+
+### Precio max
+
+```{r}
+
+maximo<- max(BD_ING_MENU$`Precio venta`)
+
+valueBox(dollar(maximo),
+         caption = "Precio máximo en carta",
+         color = "#808000",
+         icon = "ion-android-arrow-up")
+
+```
+
+
+### Diferencia 
+
+```{r}
+
+dif <- maximo - minimo
+
+valueBox(dollar(dif),
+         caption = "Diferencia entre precio minimo y máximo",
+         color = "#808000",
+         icon = "ion-android-add-circle")
+
+
+```
+
+
+### Primer principio
+
+```{r}
+
+Principio1 <- ifelse(sum(BD_ING_MENU$Principio_1 == "Medio")>=
+                   sum(BD_ING_MENU$Principio_1 == "Bajo")+
+                     sum(BD_ING_MENU$Principio_1 == "Alto"),
+                  "Se cumple el Principio",
+                  "NO se cumple el principio")
+
+
+valueBox(Principio1,
+         caption = "Principio 1",
+         color = "#808000")
+
+```
+
+
+
+
+Amplitud de precios {data-navmenu="Omnes and Smith"}
+==================================================
+
+
+Column {data-width=800}
+-----------------------------------------------------------------------------
+
+
+###
+
+```{r}
+
+maximo <- max(BD_ING_MENU$`Precio venta`) + 10
+
+BD_ING_MENU %>% 
+  ggplot()+
+  aes(`Precio venta`, ..density..)+
+  geom_density(alpha = .2, fill = "purple", color = "black")+
+  geom_vline(xintercept = mean(`Precio venta`), color = "blue", lty = 3, lwd = 0.5)+
+  xlim(c(0, maximo))+
+  scale_color_brewer(palette = "Set2")+
+  theme_fivethirtyeight()+
+  theme(axis.title = element_text())+ 
+  ylab("Densidad")+
+  xlab("Precio de Venta")-> dens
+
+ggplotly(dens)
+
+```
+
+
+###
+
+```{r}
+
+BD_ING_MENU %>% 
+  ggplot()+
+  aes(`Precio venta`, reorder(clasific_final, `Precio venta`), fill = clasific_final)+
+  geom_boxplot()+
+  theme_fivethirtyeight()+
+  scale_fill_brewer(palette= "Set2")+
+  theme(axis.title = element_text())+ 
+  theme(legend.position="none")+
+  ylab(NULL)+
+  xlab("Precio de venta")+
+  coord_flip()
+
+```
+
+
+
+Column {data-width=200}
+-----------------------------------------------------------------------
+
+
+### factor
+
+```{r}
+factor2 <- ifelse(nrow(BD_ING_MENU) <= 9, 2.5, 3)
+resul_factor <- Precio_min*factor2
+
+valueBox(resul_factor,
+         caption = "Amplitud",
+         color = "#808000")
+
+```
+
+
+
+
+### Principio 2
+
+```{r}
+
+# Principio 2
+
+factor2 <- ifelse(nrow(BD_ING_MENU) <= 9, 2.5, 3)
+
+Principio2 <- ifelse(resul_factor <= Precio_max , 
+                     "Se cumple el principio", 
+                     "No se cumple el principio")
+
+
+valueBox(Principio2,
+         caption = "Principio 2",
+         color = "#808000")
+
+```
+
+
+
+
+
+Relación demanda precio {data-navmenu="Omnes and Smith"}
+==================================================
+
+
+
+Column {data-width=200 .sidebar}
+-----------------------------------------------------------------------
+
+```{r}
+
+selectInput("Categoria2", "Categoria Clasificación",
+            c("Principio_1", "clasific_final"))
+
+
+
+
+plot_reactive <- reactive({
+  BD_ING_MENU %>%
+    pivot_longer(cols = c("clasific_final", "Principio_1"),
+               names_to = "Categoria",
+               values_to = "valores") %>% 
+    select(`Precio venta`, `Unidades vendidas`, Categoria, valores) %>% 
+    filter(Categoria == input$Categoria2)
+})
+
+```
+
+
+Column {data-width=600}
+-----------------------------------------------------------------------------
+
+###
+
+```{r}
+
+renderPlot({
+plot_reactive() %>% 
+  ggplot()+
+  aes(`Precio venta`, `Unidades vendidas`, color = valores)+
+  geom_point(size = 4, shape = 16)+
+  geom_text(label=Producto, nudge_y = 4, check_overlap = F, show.legend = F)+
+  geom_smooth(se = F, col = "darkgreen", lwd = 1)+
+  scale_color_brewer(palette="Set2")+
+  theme_fivethirtyeight()+
+  theme(axis.title = element_text())+
+  xlab("Precio de Venta")+
+  ylab("Unidades vendidas del periodo")+
+  theme(legend.position="none")
+     
+})
+
+```
+
+
+
+
+
+
+Column {data-width=200}
+-----------------------------------------------------------------------------
+
+###
+
+```{r}
+
+precio_medio_of <- round(sum(BD_ING_MENU$`Precio venta`) / nrow(BD_ING_MENU), 2)
+
+
+valueBox(dollar(precio_medio_of), 
+         caption = "Precio medio ofertado",
+         icon = "ion-arrow-graph-up-right",
+         color = "#808000")
+
+```
+
+
+###
+
+```{r}
+
+precio_medio_sol <- round(sum(`Precio venta` * `Unidades vendidas`) / sum(`Unidades vendidas`),2)
+
+valueBox(dollar(precio_medio_sol), 
+         caption = "Precio medio solicitado",
+         icon = "ion-arrow-graph-up-right",
+         color = "#808000")
+
+```
+
+
+###
+
+```{r}
+
+Indice <- round(precio_medio_of/precio_medio_sol, 2)
+
+valueBox(prettyNum(Indice, big.mark = ','), 
+         caption = "Indice relacion precio/demanda",
+         icon = "ion-arrow-graph-up-right",
+         color = "#808000")
+
+```
+
+
+###
+
+```{r}
+
+recomendacion <- ifelse(Indice > 1, "Evaluar Bajar los precio", "Evaluar Subir el precio")
+
+valueBox(recomendacion, 
+         caption = "Principio 3",
+         icon = "ion-arrow-graph-up-right",
+         color = "#808000")
+
+```
+
+
